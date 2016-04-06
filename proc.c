@@ -248,6 +248,7 @@ wait(void)
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
+
         proc->chan = 0;
         proc->state = RUNNING;
         release(&ptable.lock);
@@ -271,7 +272,7 @@ wait(void)
 void 
 freeproc(struct proc *p)
 {
-  if (!p || (p->state != ZOMBIE && p->state != UNUSED))
+  if (!p || p->state != ZOMBIE)
     panic("freeproc not zombie");
   kfree(p->kstack);
   p->kstack = 0;
@@ -315,7 +316,7 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
-      if (p->state == ZOMBIE || p->state == UNUSED)
+      if (p->state == ZOMBIE)
         freeproc(p);
     }
     release(&ptable.lock);
@@ -384,10 +385,6 @@ sleep(void *chan, struct spinlock *lk)
   if(lk == 0)
     panic("sleep without lk");
 
-  // Go to sleep.
-  proc->chan = (int)chan;
-  proc->state = SLEEPING;
-
   // Must acquire ptable.lock in order to
   // change p->state and then call sched.
   // Once we hold ptable.lock, we can be
@@ -398,6 +395,11 @@ sleep(void *chan, struct spinlock *lk)
     acquire(&ptable.lock);  //DOC: sleeplock1
     release(lk);
   }
+
+  // Go to sleep.
+  proc->chan = (int)chan;
+  proc->state = SLEEPING;
+
 
   sched();
 
@@ -418,9 +420,9 @@ wakeup1(void *chan)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == (int)chan){
-      p->state = RUNNABLE;
-        // Tidy up.
+      // Tidy up.
       p->chan = 0;
+      p->state = RUNNABLE;
     }
 }
 
