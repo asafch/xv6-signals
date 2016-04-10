@@ -92,6 +92,7 @@ exec(char *path, char **argv)
   proc->sz = sz;
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
+  proc->sighandler = (sig_handler)-1; // reset the signal handler
   switchuvm(proc);
   freevm(oldpgdir);
   return 0;

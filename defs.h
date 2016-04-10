@@ -118,6 +118,10 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+sig_handler     sigset(sig_handler);
+int             sigsend(int, int);
+void            sigret(void);
+void            sigpause(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

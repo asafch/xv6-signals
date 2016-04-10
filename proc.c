@@ -91,7 +91,7 @@ allocproc(void)
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-
+  p->sighandler = (sig_handler)-1; // default signal handler value
   return p;
 }
 
@@ -175,7 +175,7 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
-
+  np->sighandler = proc->sighandler; // copy the parent's signal handler
   safestrcpy(np->name, proc->name, sizeof(proc->name));
 
   pid = np->pid;
@@ -505,4 +505,22 @@ procdump(void)
     }
     cprintf("\n\n\n");
   }
+}
+
+sig_handler sigset(sig_handler sighandler) {
+  sig_handler old = proc->sighandler;
+  proc->sighandler = sighandler;
+  return old;
+}
+
+int sigsend(int dest_pid, int value) {
+  return 0;
+}
+
+void sigret(void) {
+
+}
+
+void sigpause(void) {
+
 }
