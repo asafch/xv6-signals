@@ -121,7 +121,7 @@ static inline uint
 xchg(volatile uint *addr, uint newval)
 {
   uint result;
-  
+
   // The + in "+m" denotes a read-modify-write operand.
   asm volatile("lock; xchgl %0, %1" :
                "+m" (*addr), "=a" (result) :
@@ -139,9 +139,22 @@ rcr2(void)
 }
 
 static inline void
-lcr3(uint val) 
+lcr3(uint val)
 {
   asm volatile("movl %0,%%cr3" : : "r" (val));
+}
+
+static inline int cas(volatile int * addr, int expected, int newval) {
+  int ret = 1;
+  asm volatile("lock;\n\t"
+                "cmpxchgl %3, (%2)\n\t" // eax == [ebx] ? [ebx] = newval : eax = [ebx]
+                "jz cas_success\n\t"
+                "movl $0, %0\n\t"
+                "cas_success:\n\t"
+                : "=m"(ret)
+                : "a"(expected), "b"(addr), "r"(newval)
+                : "memory"); // 'expected' in eax, 'addr' in ebx
+  return ret;
 }
 
 //PAGEBREAK: 36
