@@ -30,9 +30,12 @@ int
 allocpid(void)
 {
   int pid;
-  acquire(&ptable.lock);
-  pid = nextpid++;
-  release(&ptable.lock);
+  // acquire(&ptable.lock);
+  // pid = nextpid++;
+  // release(&ptable.lock);
+  do {
+    pid = nextpid;
+  } while (!cas(&nextpid, pid, pid + 1));
   return pid;
 }
 //PAGEBREAK: 32
@@ -46,16 +49,25 @@ allocproc(void)
   struct proc *p;
   char *sp;
 
-  acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == UNUSED)
-      goto found;
-  release(&ptable.lock);
-  return 0;
+  // acquire(&ptable.lock);
+  // for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  //   if(p->state == UNUSED)
+  //     goto found;
+  // release(&ptable.lock);
 
-found:
-  p->state = EMBRYO;
-  release(&ptable.lock);
+  do {
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      if(p->state == UNUSED)
+        break;
+    if (p == &ptable.proc[NPROC])
+      return 0; // ptable is full
+  } while (!cas(&p->state, UNUSED, EMBRYO));
+
+  // return 0;
+
+// found:
+  // p->state = EMBRYO;
+  // release(&ptable.lock);
 
   p->pid = allocpid();
 
