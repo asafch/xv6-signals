@@ -25,7 +25,7 @@ int sleep(int);
 int uptime(void);
 sig_handler sigset(sig_handler);
 int sigsend(int, int);
-void sigret(void);
+// don't add a user function for sigret - it would never be called explicitly
 int sigpause(void);
 
 // ulib.c

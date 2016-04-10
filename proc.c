@@ -507,14 +507,59 @@ procdump(void)
   }
 }
 
-sig_handler sigset(sig_handler sighandler) {
-  sig_handler old = proc->sighandler;
-  proc->sighandler = sighandler;
-  return old;
+int push(struct cstack *cstack, int sender_pid, int recepient_pid, int value) {
+  struct cstackframe *head;
+  do {
+    head = cstack->head;
+  } while (!cas(&cstack->head->used, 0, 1));
+  if (head == cstack->frames + 10) {
+    head->used = 0;
+    return 0; // stack is full
+  }
+  head->sender_pid = sender_pid;
+  head->recepient_pid = recepient_pid;
+  head->value = value;
+  (head + 1)->used = 0;
+  do {
+    ;
+  } while (!cas((int*)cstack->head, (int)head, (int)(head + 1)));
+  return 1;
+}
+
+struct cstackframe *pop(struct cstack *cstack) {
+  struct cstackframe *head;
+  do {
+    head = cstack->head;
+  } while (!cas(&cstack->head->used, 0, 1));
+  if (head == cstack->frames) {
+    head->used = 0;
+    return (struct cstackframe*) 0;
+  }
+  head--;
+  // head->used = 0;
+  do {
+    ;
+  } while (!cas((int*)cstack->head, (int)(head + 1), (int)head));
+  return head;
+}
+
+sig_handler sigset(sig_handler new_sig_handler) {
+  sig_handler old_sig_handler = proc->sighandler;
+  proc->sighandler = new_sig_handler;
+  return old_sig_handler;
 }
 
 int sigsend(int dest_pid, int value) {
-  return 0;
+  struct proc *p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if (p->pid == dest_pid)
+      goto sigsend_dest_pid_found;
+  }
+  return -1; // dest_pid wan't found, meaning it's not a valid pid. return error
+sigsend_dest_pid_found:
+  if (push(&p->cstack, proc->pid, dest_pid, value) == 0)
+    return -1; // pending signal stack is full. return error
+  return 0; // successful execution
 }
 
 void sigret(void) {

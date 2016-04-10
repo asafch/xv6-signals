@@ -51,6 +51,21 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+// entry in concurrent stack
+struct cstackframe {
+  int sender_pid;
+  int recepient_pid;
+  int value;
+  int used;
+  struct cstackframe *next;
+};
+
+// concurrent stack
+struct cstack {
+  struct cstackframe frames[11];
+  struct cstackframe *head;
+};
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -67,6 +82,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   sig_handler sighandler;
+  struct cstack cstack;
 };
 
 // Process memory is laid out contiguously, low addresses first:
