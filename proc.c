@@ -470,6 +470,40 @@ kill(int pid)
   return -1;
 }
 
+
+
+int push(struct cstack *cstack, int sender_pid, int recepient_pid, int value) {
+  struct cstackframe *newSig;
+  for(newSig = cstack->frames ;  newSig < cstack->frames + 10; newSig++){
+    if (cas(&newSig->used, 0, 1))
+      break;
+  }
+  if (newSig == cstack->frames + 10)//no free cell
+    return 0;
+
+  newSig->sender_pid = sender_pid;
+  newSig->recepient_pid = recepient_pid;
+  newSig->value = value;
+  do {
+    newSig->next = cstack->head;
+  } while (!cas((int*)cstack->head, (int)newSig->next, (int)newSig  ));
+  return 1;
+}
+
+struct cstackframe *pop(struct cstack *cstack) {
+  struct cstackframe *top;
+
+  do {
+    top = cstack->head;
+    if (top==0)
+      return (struct cstackframe *)0;
+  } while (!cas((int*)cstack->head, (int)top, (int)top->next  ));
+
+  return top;
+}
+
+
+
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
@@ -504,44 +538,41 @@ procdump(void)
         cprintf(" %p", pc[i]);
     }
     cprintf("\n\n\n");
+    cprintf("HEY1");
+    struct cstack testMX;
+    struct cstack* testM = &testMX;
+    cprintf("1st push return: %d!", push(testM, 9,9,9));
+    push(testM, 4,5,6);
+    push (testM, 1,2,3);
+    push(testM, 4,5,6);
+    push (testM, 1,2,3);
+    push(testM, 4,5,6);
+    push (testM, 1,2,3);
+    push(testM, 4,5,6);
+    push (testM, 1,2,3);
+    cprintf("10th push return: %d!", push(testM, 4,5,6));
+
+    cprintf("11th push return: %d!", push(testM, 4,5,6));
+
+    pop(testM);
+      pop(testM);
+        pop(testM);
+          pop(testM);
+            pop(testM);
+              pop(testM);
+                pop(testM);
+                  pop(testM);
+                    pop(testM);
+                      cprintf("10th pop returns: %d!", pop(testM)->value);
+
+                      cprintf("11th pop returns: %d!", (int)pop(testM));
+
+
+    cprintf("HEY2");
   }
 }
 
-int push(struct cstack *cstack, int sender_pid, int recepient_pid, int value) {
-  struct cstackframe *head;
-  do {
-    head = cstack->head;
-  } while (!cas(&cstack->head->used, 0, 1));
-  if (head == cstack->frames + 10) {
-    head->used = 0;
-    return 0; // stack is full
-  }
-  head->sender_pid = sender_pid;
-  head->recepient_pid = recepient_pid;
-  head->value = value;
-  (head + 1)->used = 0;
-  do {
-    ;
-  } while (!cas((int*)cstack->head, (int)head, (int)(head + 1)));
-  return 1;
-}
 
-struct cstackframe *pop(struct cstack *cstack) {
-  struct cstackframe *head;
-  do {
-    head = cstack->head;
-  } while (!cas(&cstack->head->used, 0, 1));
-  if (head == cstack->frames) {
-    head->used = 0;
-    return (struct cstackframe*) 0;
-  }
-  head--;
-  // head->used = 0;
-  do {
-    ;
-  } while (!cas((int*)cstack->head, (int)(head + 1), (int)head));
-  return head;
-}
 
 sig_handler sigset(sig_handler new_sig_handler) {
   sig_handler old_sig_handler = proc->sighandler;
