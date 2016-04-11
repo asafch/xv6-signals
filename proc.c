@@ -92,6 +92,12 @@ allocproc(void)
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
   p->sighandler = (sig_handler)-1; // default signal handler value
+  p->cstack.head = 0;
+  struct cstackframe *newSig;
+  for(newSig = p->cstack.frames ;  newSig < p->cstack.frames + 10; newSig++){
+    newSig->used = 0;
+  }
+
   return p;
 }
 
@@ -473,20 +479,27 @@ kill(int pid)
 
 
 int push(struct cstack *cstack, int sender_pid, int recepient_pid, int value) {
+                                                                                //  cprintf("begin push\n");
   struct cstackframe *newSig;
   for(newSig = cstack->frames ;  newSig < cstack->frames + 10; newSig++){
     if (cas(&newSig->used, 0, 1))
       break;
   }
+                                                                                    //  cprintf("finished looping(maybedidnt find cell)\n");
   if (newSig == cstack->frames + 10)//no free cell
     return 0;
 
+                                                                                //  cprintf("found cell - setting new values \n");
   newSig->sender_pid = sender_pid;
   newSig->recepient_pid = recepient_pid;
   newSig->value = value;
+                                                                                        //  cprintf("begining do cas\n");
   do {
+                                                                                              //cprintf("do\n");
     newSig->next = cstack->head;
-  } while (!cas((int*)cstack->head, (int)newSig->next, (int)newSig  ));
+                                                                                                //cprintf("do2\n");
+  } while (!cas((int*)&cstack->head, (int)newSig->next, (int)newSig  ));
+                                                                                                //  cprintf("returnning 1\n");
   return 1;
 }
 
@@ -495,9 +508,12 @@ struct cstackframe *pop(struct cstack *cstack) {
 
   do {
     top = cstack->head;
-    if (top==0)
+    if (top==0){
+                                                                                            //  cprintf("pop returns 0\n");
       return (struct cstackframe *)0;
-  } while (!cas((int*)cstack->head, (int)top, (int)top->next  ));
+    }
+                                                                                        //  cprintf("                                         about to do cas pop\n");
+  } while (!cas((int*)&cstack->head, (int)top, (int)top->next  ));
 
   return top;
 }
@@ -538,38 +554,46 @@ procdump(void)
         cprintf(" %p", pc[i]);
     }
     cprintf("\n\n\n");
-    cprintf("HEY1");
-    struct cstack testMX;
-    struct cstack* testM = &testMX;
-    cprintf("1st push return: %d!", push(testM, 9,9,9));
-    push(testM, 4,5,6);
-    push (testM, 1,2,3);
-    push(testM, 4,5,6);
-    push (testM, 1,2,3);
-    push(testM, 4,5,6);
-    push (testM, 1,2,3);
-    push(testM, 4,5,6);
-    push (testM, 1,2,3);
-    cprintf("10th push return: %d!", push(testM, 4,5,6));
-
-    cprintf("11th push return: %d!", push(testM, 4,5,6));
-
-    pop(testM);
-      pop(testM);
-        pop(testM);
-          pop(testM);
-            pop(testM);
-              pop(testM);
-                pop(testM);
-                  pop(testM);
-                    pop(testM);
-                      cprintf("10th pop returns: %d!", pop(testM)->value);
-
-                      cprintf("11th pop returns: %d!", (int)pop(testM));
-
-
-    cprintf("HEY2");
   }
+  // cprintf("HEY1\n");
+  // struct cstack testMX;
+  // struct cstack* testM = &testMX;
+  //
+  // struct cstackframe *newSig;
+  // for(newSig = testM->frames ;  newSig < testM->frames + 10; newSig++){
+  //   newSig->used = 0;
+  // }
+  // testM->head = 0;
+  //
+  //
+  // cprintf("1st push return: %d!\n", push(testM, 9,9,9));
+  // push(testM, 4,5,6);
+  // push (testM, 1,2,3);
+  // push(testM, 4,5,6);
+  // push (testM, 1,2,3);
+  // push(testM, 4,5,6);
+  // push (testM, 1,2,3);
+  // push(testM, 4,5,6);
+  // push (testM, 1,2,3);
+  // cprintf("10th push return: %d!\n", push(testM, 4,5,6));
+  //
+  // cprintf("11th push return: %d!\n", push(testM, 4,5,6));
+  //
+  // pop(testM);
+  //   pop(testM);
+  //     pop(testM);
+  //       pop(testM);
+  //         pop(testM);
+  //           pop(testM);
+  //             pop(testM);
+  //               pop(testM);
+  //     cprintf("9th pop returns: %d!\n", pop(testM)->value);
+  //                   cprintf("10th pop returns: %d!\n", pop(testM)->value);
+  //
+  //                   cprintf("11th pop returns: %d!\n", (int)pop(testM));
+  //
+  //
+  // cprintf("HEY2\n");
 }
 
 

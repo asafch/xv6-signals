@@ -147,13 +147,11 @@ lcr3(uint val)
 static inline int cas(volatile int * addr, int expected, int newval) {
   int ret = 1;
   asm volatile("lock;\n\t"
-
-                  "cmpl $0, %2\n\t"
-
-                "je cas_fail\n\t"
+                  //"cmpl $0, %2\n\t"
+              //  "je cas_fail\n\t"
                 "cmpxchgl %3, (%2)\n\t" // eax == [ebx] ? [ebx] = newval : eax = [ebx]
                 "jz cas_success\n\t"
-                "cas_fail:\n\t"
+                //"cas_fail:\n\t"
                 "movl $0, %0\n\t"
                 "cas_success:\n\t"
                 : "=m"(ret)
