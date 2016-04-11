@@ -1,4 +1,5 @@
 #include "mmu.h"
+.globl checkSignals
 
   # vectors.S sends all traps here.
 .globl alltraps
@@ -9,7 +10,7 @@ alltraps:
   pushl %fs
   pushl %gs
   pushal
-  
+
   # Set up data and per-cpu segments.
   movw $(SEG_KDATA<<3), %ax
   movw %ax, %ds
@@ -26,6 +27,7 @@ alltraps:
   # Return falls through to trapret...
 .globl trapret
 trapret:
+  call checkSignals
   popal
   popl %gs
   popl %fs

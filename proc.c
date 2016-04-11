@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -97,6 +99,7 @@ allocproc(void)
   for(newSig = p->cstack.frames ;  newSig < p->cstack.frames + 10; newSig++){
     newSig->used = 0;
   }
+  p->ignoreSignals=0;
 
   return p;
 }
@@ -618,9 +621,47 @@ sigsend_dest_pid_found:
 }
 
 void sigret(void) {
-
+  memmove(proc->tf, &proc->oldTf, sizeof(struct trapframe));
+  proc->ignoreSignals = 0;
 }
 
 void sigpause(void) {
 
+}
+
+// void callSigRet(){
+//   SYSCALL(sigret);                //FIXME
+// }
+
+void checkSignals(void){
+  if (proc->ignoreSignals)
+    return;
+  struct cstackframe *poppedCstack = pop(&proc->cstack);
+  if (poppedCstack == (struct cstackframe *)0)//empty stack
+    return;
+  if(proc->sighandler == (sig_handler)-1)//default handler does nothing
+    return;
+  //if we hanvent returned we need to call the signal handler
+  proc->ignoreSignals = 1;
+  memmove(&proc->oldTf, proc->tf, sizeof(struct trapframe));//backing up trap frame
+
+                          // int* addressOfInjectedCode = proc->tf->esp-1*sizeof(int);
+                          // memmove(addressOfInjectedCode, &&sigret, sizeof(int));                       //    inject CALL sig to user stack
+                          //
+                          // memmove(proc->tf->esp-2*sizeof(int), &poppedCstack->value, sizeof(int));
+                          // memmove(proc->tf->esp-3*sizeof(int), &poppedCstack->sender_pid, sizeof(int));//push the poppedCstack->sender_pid&value  parametrs
+                          //
+                          // memmove(proc->tf->esp-4*sizeof(int), addressOfInjectedCode, sizeof(int));//push the address of the injected line
+                        sigret://                                                                                                                     FIXME
+
+  *((int*)(proc->tf->esp-4)) = poppedCstack->value;
+  *((int*)(proc->tf->esp-8)) = poppedCstack->sender_pid;
+  //push the poppedCstack->sender_pid&value  parametrs
+  *((int*)(proc->tf->esp-12)) = (int)&&sigret;// return adress is a compiled code that calls sigret
+  proc->tf->esp -=12;//updted the esp value;
+
+
+  proc->tf->esp = proc->tf->esp-4*sizeof(int);//update the user usp after all the push commands
+
+  proc->tf->esi = (uint)proc->sighandler;//setting the first instruction the be excuted after trapret
 }
