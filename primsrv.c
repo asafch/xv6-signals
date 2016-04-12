@@ -13,6 +13,7 @@ findPrim(int value){
 	int i;
 
 	while(1){
+		sol++;
 		for (i = 2; i < sol; i++){
 			if (sol%i==0)
 				break;
@@ -42,7 +43,8 @@ fatherHandler(int childPid, int value){
 		if (table[0][i] == childPid)
 			break; //we found the column of this child
 	}
-	printf(1, "worker %d returned %d as a resault for %d\n", childPid, value, table[2][i]);
+	numOfIdleChildren++;
+	printf(1, "**  worker %d returned %d as a resault for %d  ***\n", childPid, value, table[2][i]);
 	table[1][i] = 0; //child is idle again;
 }
 
@@ -54,7 +56,7 @@ main(int argc, char *argv[])
 				printf(1, "Usage: primsrv <n>\n");
 				exit();
  		}
-	//sigset( (struct sig_handler)&workerPrimHandler ); //this handler will be used by all the children              			TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	sigset( (sig_handler)&workerPrimHandler ); //this handler will be used by all the children
 	n = atoi(argv[1]);
 
 	numOfIdleChildren = n;
@@ -85,12 +87,12 @@ main(int argc, char *argv[])
 	printf(1, "				***       \n");
 
 	//father code;
-	//sigset((struct sig_handler)&fatherHandler);										TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	sigset((sig_handler)&fatherHandler);
 
 	while(1){
 		printf(1, "please enter a number:");
 		gets (buf, 128);
-		if(strlen(buf)==0)
+		if(strlen(buf)==1 && buf[0]=='\n')
 			continue; //used to wake up the process
 
 		numRead = atoi(buf);
@@ -98,26 +100,30 @@ main(int argc, char *argv[])
 			break;//preparing to exit
 
 		if (numOfIdleChildren==0){
-			printf(1, "no idle workers");
+			printf(1, "no idle workers\n");
 			continue;
 		}
 		for (i = 0; i < n; i++){
 			if (table[1][i] == 0){//found idle child
 				table[1][i] = 1;
 				table[2][i] = numRead;
+				numOfIdleChildren--;
 				sigsend(table[0][i], numRead);
 				break;
 			}
 		}
 	}
 
+
 	for (i = 0; i < n; i++){
 		sigsend(table[0][i], 0);
 	}
 	for (i = 0; i < n; i++){
+		if(table[1][i] == 1)//its still busy
+			sigpause();
 		wait();
 	}
 
-	printf(1, "primesrv exit\n");
+	printf(1, "primesrv exit!!:-)\n");
 	exit();
 }

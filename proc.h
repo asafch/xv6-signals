@@ -62,7 +62,7 @@ struct cstackframe {
 
 // concurrent stack
 struct cstack {
-  struct cstackframe frames[11];
+  struct cstackframe frames[10];
   struct cstackframe *head;
 };
 
@@ -128,6 +128,8 @@ struct proc {
 
   int ignoreSignals;
   struct trapframe2 oldTf;        // Trap frame for oldTF while handeling signals
+
+  int sigPauseInvoked;
 };
 
 // Process memory is laid out contiguously, low addresses first:

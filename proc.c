@@ -100,6 +100,7 @@ allocproc(void)
     newSig->used = 0;
   }
   p->ignoreSignals=0;
+  p->sigPauseInvoked = 0;
 
   return p;
 }
@@ -482,44 +483,57 @@ kill(int pid)
 
 
 int push(struct cstack *cstack, int sender_pid, int recepient_pid, int value) {
-                                                                                //  cprintf("begin push\n");
+  struct proc *p;
+  int ans = 1;
+                                                                                            //  cprintf("push acuire\n");
+  acquire(&ptable.lock);
   struct cstackframe *newSig;
   for(newSig = cstack->frames ;  newSig < cstack->frames + 10; newSig++){
     if (cas(&newSig->used, 0, 1))
       break;
   }
-                                                                                    //  cprintf("finished looping(maybedidnt find cell)\n");
-  if (newSig == cstack->frames + 10)//no free cell
-    return 0;
+  if (newSig == cstack->frames + 10){//no free cell
+    ans = 0;
+    cprintf("\n\n             ERROR - NO free cell during proc.c::push !!!\n\n\n");
+  }
+  else{
+    newSig->sender_pid = sender_pid;
+    newSig->recepient_pid = recepient_pid;
+    newSig->value = value;
+    do {
+      newSig->next = cstack->head;
+    } while (!cas((int*)&cstack->head, (int)newSig->next, (int)newSig  ));
 
-                                                                                //  cprintf("found cell - setting new values \n");
-  newSig->sender_pid = sender_pid;
-  newSig->recepient_pid = recepient_pid;
-  newSig->value = value;
-                                                                                        //  cprintf("begining do cas\n");
-  do {
-                                                                                              //cprintf("do\n");
-    newSig->next = cstack->head;
-                                                                                                //cprintf("do2\n");
-  } while (!cas((int*)&cstack->head, (int)newSig->next, (int)newSig  ));
-                                                                                                //  cprintf("returnning 1\n");
-  return 1;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->pid== recepient_pid){
+          if(p->sigPauseInvoked){
+            p->state = RUNNABLE;
+            p->sigPauseInvoked=0;
+          }
+          break;//recipient_pid is valid
+        }
+    }
+  }
+                                                                                              //cprintf("     push release\n");
+  release(&ptable.lock);
+  return ans;
 }
 
 struct cstackframe *pop(struct cstack *cstack) {
+                                                                                            //  cprintf("pop acuire\n");
+  acquire(&ptable.lock);
   struct cstackframe *top;
-
   do {
     top = cstack->head;
-    if (top==0){
-                                                                                            //  cprintf("pop returns 0\n");
-      return (struct cstackframe *)0;
-    }
-                                                                                        //  cprintf("                                         about to do cas pop\n");
+    if (top==0)
+      break;
   } while (!cas((int*)&cstack->head, (int)top, (int)top->next  ));
-
+                                                                                              //  cprintf("     pop release\n");
+  release(&ptable.lock);
   return top;
 }
+
+
 
 
 
@@ -558,6 +572,7 @@ procdump(void)
     }
     cprintf("\n\n\n");
   }
+
   // cprintf("HEY1\n");
   // struct cstack testMX;
   // struct cstack* testM = &testMX;
@@ -582,18 +597,25 @@ procdump(void)
   //
   // cprintf("11th push return: %d!\n", push(testM, 4,5,6));
   //
-  // pop(testM);
-  //   pop(testM);
-  //     pop(testM);
-  //       pop(testM);
-  //         pop(testM);
-  //           pop(testM);
-  //             pop(testM);
-  //               pop(testM);
+  // pop(testM)->used=0;
+  // cprintf("extra pop return 1\n 12th push return: %d!\n", push(testM, 4,5,6));
+  //
+  // pop(testM)->used=0;
+  //   pop(testM)->used=0;
+  //     pop(testM)->used=0;
+  //       pop(testM)->used=0;
+  //         pop(testM)->used=0;
+  //           pop(testM)->used=0;
+  //             pop(testM)->used=0;
+  //               pop(testM)->used=0;
   //     cprintf("9th pop returns: %d!\n", pop(testM)->value);
-  //                   cprintf("10th pop returns: %d!\n", pop(testM)->value);
+  //                   cprintf("10th pop returns: %d!\n", pop(testM)->value); //should release the used of the 2 last pops as well!!   !!
   //
   //                   cprintf("11th pop returns: %d!\n", (int)pop(testM));
+  //
+  //                 cprintf("13th push return: %d!\n", push(testM, 7,7,7));
+  //                 cprintf("12th pop returns: %d!\n", (int)pop(testM)->value);
+  //               //this test should return 1 1 0 1 1  6 9 0 1 7
   //
   //
   // cprintf("HEY2\n");
@@ -626,7 +648,16 @@ void sigret(void) {
 }
 
 void sigpause(void) {
+                                                                                            //  cprintf("sigPause acuire\n");
+  acquire(&ptable.lock);
+  if (proc->cstack.head==0){//only if the stack is EMPTY we want to go to sleep!!
+    proc->state =SLEEPING;
+    proc->sigPauseInvoked = 1;
+    sched();  //scheded is called with the table locked
+  }
 
+                                                                                            //  cprintf("     sigpase realse\n");
+  release(&ptable.lock);
 }
 
 void checkSignals(void){
@@ -648,4 +679,6 @@ void checkSignals(void){
   *((int*)(proc->tf->esp-12)) = proc->tf->esp;// return adress is a compiled code that calls sigret
   proc->tf->esp -= 12;
   proc->tf->eip = (uint)proc->sighandler;//setting the first instruction the be excuted after trapret
+
+  poppedCstack->used=0;//realsing the cell;
 }
