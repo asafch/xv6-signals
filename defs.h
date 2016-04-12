@@ -57,6 +57,10 @@ void            ideinit(void);
 void            ideintr(void);
 void            iderw(struct buf*);
 
+//invokesigret.S
+void            invoke_sigret_start(void);
+void            invoke_sigret_end(void);
+
 // ioapic.c
 void            ioapicenable(int irq, int cpu);
 extern uchar    ioapicid;

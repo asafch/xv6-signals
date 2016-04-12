@@ -5,6 +5,7 @@ OBJS = \
 	file.o\
 	fs.o\
 	ide.o\
+	invokesigret.o\
 	ioapic.o\
 	kalloc.o\
 	kbd.o\

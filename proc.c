@@ -629,10 +629,6 @@ void sigpause(void) {
 
 }
 
-// void callSigRet(){
-//   SYSCALL(sigret);                //FIXME
-// }
-
 void checkSignals(void){
   if (proc->ignoreSignals)
     return;
@@ -641,27 +637,13 @@ void checkSignals(void){
     return;
   if(proc->sighandler == (sig_handler)-1)//default handler does nothing
     return;
-  //if we hanvent returned we need to call the signal handler
   proc->ignoreSignals = 1;
   memmove(&proc->oldTf, proc->tf, sizeof(struct trapframe));//backing up trap frame
-
-                          // int* addressOfInjectedCode = proc->tf->esp-1*sizeof(int);
-                          // memmove(addressOfInjectedCode, &&sigret, sizeof(int));                       //    inject CALL sig to user stack
-                          //
-                          // memmove(proc->tf->esp-2*sizeof(int), &poppedCstack->value, sizeof(int));
-                          // memmove(proc->tf->esp-3*sizeof(int), &poppedCstack->sender_pid, sizeof(int));//push the poppedCstack->sender_pid&value  parametrs
-                          //
-                          // memmove(proc->tf->esp-4*sizeof(int), addressOfInjectedCode, sizeof(int));//push the address of the injected line
-                        sigret://                                                                                                                     FIXME
-
+  proc->tf->esp -= (uint)&invoke_sigret_end - (uint)&invoke_sigret_start;
+  memmove((void*)proc->tf->esp, invoke_sigret_start, (uint)&invoke_sigret_end - (uint)&invoke_sigret_start);
   *((int*)(proc->tf->esp-4)) = poppedCstack->value;
   *((int*)(proc->tf->esp-8)) = poppedCstack->sender_pid;
-  //push the poppedCstack->sender_pid&value  parametrs
-  *((int*)(proc->tf->esp-12)) = (int)&&sigret;// return adress is a compiled code that calls sigret
-  proc->tf->esp -=12;//updted the esp value;
-
-
-  proc->tf->esp = proc->tf->esp-4*sizeof(int);//update the user usp after all the push commands
-
-  proc->tf->esi = (uint)proc->sighandler;//setting the first instruction the be excuted after trapret
+  *((int*)(proc->tf->esp-12)) = proc->tf->esp;// return adress is a compiled code that calls sigret
+  proc->tf->esp -= 12;
+  proc->tf->eip = (uint)proc->sighandler;//setting the first instruction the be excuted after trapret
 }
