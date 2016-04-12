@@ -630,6 +630,8 @@ void sigpause(void) {
 }
 
 void checkSignals(void){
+  if (proc == 0)
+    return;
   if (proc->ignoreSignals)
     return;
   struct cstackframe *poppedCstack = pop(&proc->cstack);
