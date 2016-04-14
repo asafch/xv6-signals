@@ -71,7 +71,9 @@ struct cstack {
 //PAGEBREAK: 36
 // Layout of the trap frame built on the stack by the
 // hardware and by trapasm.S, and passed to trap().
-struct trapframe2 {                                               //for compile problems
+// This is an exact duplicate of struct trapframe in x86.h, and it's here due
+// to compilation errors.
+struct trapframe2 {
   // registers as pushed by pusha
   uint edi;
   uint esi;
@@ -123,13 +125,11 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  sig_handler sighandler;
-  struct cstack cstack;
-
-  int ignoreSignals;
-  struct trapframe2 oldTf;        // Trap frame for oldTF while handeling signals
-
-  int sigPauseInvoked;
+  sig_handler sighandler;      // Signal handler function address
+  struct cstack cstack;        // Pending signals concurrent stack
+  int ignoreSignals;           // Currently handling signals, or not
+  struct trapframe2 oldTf;     // Backup trapframe for signal handling logic
+  int sigPauseInvoked;         // sigpause system call has been invoked
 };
 
 // Process memory is laid out contiguously, low addresses first:

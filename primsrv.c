@@ -1,111 +1,93 @@
 #include "user.h"
 
-
-
 int numOfIdleChildren;
 int n;
-int table[3][62];//this table holds the idle childs   (pid, idle=0/busy=1, value from shell)
+int table[3][62]; //this table holds the idle childs   (pid, idle=0/busy=1, value from shell)
 
-
-int
-findPrim(int value){
-	int sol = value;
+int findPrim(int value){
+	// int sol = value;
 	int i;
-
-	while(1){
-		sol++;
-		for (i = 2; i < sol; i++){
-			if (sol%i==0)
+	while (1) {
+		value++;
+		for (i = 2; i < value; i++){
+			if (value % i == 0)
 				break;
 		}
-		if (i==sol)//we didnt find any divder meaning sol is a prim
-			return sol;
+		if (i == value) // sol is a prime number
+			return value;
 	}
 }
 
-
-void //sigHandler of the children workerking
-workerPrimHandler(int fatherPid, int value){
+void workerPrimHandler(int fatherPid, int value){
 	if (value == 0){
-		printf(1, "worker %d exits\n", (getpid()) );
+		printf(1, "worker %d exits\n", getpid());
 		exit();
 	}
 	int primNum = findPrim(value);
 	sigsend(fatherPid, primNum);
 }
 
-
-
-void //sig handler for the primsrv
-fatherHandler(int childPid, int value){
+void fatherHandler(int childPid, int value){
 	int i;
 	for (i = 0; i < n; i++){
 		if (table[0][i] == childPid)
-			break; //we found the column of this child
+			break;
 	}
 	numOfIdleChildren++;
-	printf(1, "**  worker %d returned %d as a resault for %d  ***\n", childPid, value, table[2][i]);
-	table[1][i] = 0; //child is idle again;
+	printf(1, "worker %d returned %d as a result for %d\n", childPid, value, table[2][i]);
+	table[1][i] = 0; // mark child as idle
 }
 
-
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	if (argc != 2){
 				printf(1, "Usage: primsrv <n>\n");
 				exit();
- 		}
-	sigset( (sig_handler)&workerPrimHandler ); //this handler will be used by all the children
+	}
+	// Set initial signal handler to be that of the children. When the children
+	// are created with fork(), this signal handler is duplicated as well.
+	// After spawning all children, set the father's signal handler to its
+	// desired handler.
+	sigset((sig_handler)&workerPrimHandler);
 	n = atoi(argv[1]);
-
+	if (n > 62)	{
+				printf(1, "62 is the maximum number of children\n");
+				exit();
+	}
 	numOfIdleChildren = n;
 	int i;
-	if (n>62){
-				printf(1, "62 is the maximum num of children!\n");
-				exit();
- 		}
 	int numRead;
 	char buf[128];
-
 	printf(1, "workers pids:\n");
 	for (i = 0; i < n; i++){
 			table[0][i] = fork();
-			if (table[0][i] == 0) { // child
+			if (table[0][i] == 0) { // child code
 				while(1)
 					sigpause();	//the handler itself suposed to exit
-
-				printf(1, "ERROR!!!!!!!!!!!!!!!!!!!!!\n");
-				exit(); //children wxit here?
+				printf(1, "ERROR\n");
+				exit();
 			}
-
-			else{ //father
-				table[1][i] = 0; //child is idle
+			else { // father code
+				table[1][i] = 0; // mark child as idle
 				printf(1, "pid: %d\n", table[0][i]);
 			}
 	}
 	printf(1, "				***       \n");
-
-	//father code;
 	sigset((sig_handler)&fatherHandler);
-
-	while(1){
-		printf(1, "please enter a number:");
-		gets (buf, 128);
-		if(strlen(buf)==1 && buf[0]=='\n')
-			continue; //used to wake up the process
-
+	while (1) {
+		printf(1, "please enter a number: ");
+		gets(buf, 128);
+		if(strlen(buf) == 1 && buf[0]=='\n')
+			continue;
 		numRead = atoi(buf);
-		if (numRead ==0)
-			break;//preparing to exit
-
-		if (numOfIdleChildren==0){
+		if (numRead == 0)
+			break; // commence graceful shutdown
+		if (numOfIdleChildren == 0){
 			printf(1, "no idle workers\n");
 			continue;
 		}
 		for (i = 0; i < n; i++){
-			if (table[1][i] == 0){//found idle child
-				table[1][i] = 1;
+			if (table[1][i] == 0){ // idle child
+				table[1][i] = 1;	// mark child as busy
 				table[2][i] = numRead;
 				numOfIdleChildren--;
 				sigsend(table[0][i], numRead);
@@ -113,17 +95,14 @@ main(int argc, char *argv[])
 			}
 		}
 	}
-
-
 	for (i = 0; i < n; i++){
-		sigsend(table[0][i], 0);
+		sigsend(table[0][i], 0); // signal children to self-terminate
 	}
 	for (i = 0; i < n; i++){
-		if(table[1][i] == 1)//its still busy
-			sigpause();
+		if(table[1][i] == 1)
+			sigpause(); // wait for a result
 		wait();
 	}
-
-	printf(1, "primesrv exit!!:-)\n");
+	printf(1, "primesrv exit\n");
 	exit();
 }

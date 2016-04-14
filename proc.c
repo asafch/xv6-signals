@@ -485,57 +485,47 @@ kill(int pid)
 int push(struct cstack *cstack, int sender_pid, int recepient_pid, int value) {
   struct proc *p;
   int ans = 1;
-                                                                                            //  cprintf("push acuire\n");
   acquire(&ptable.lock);
   struct cstackframe *newSig;
-  for(newSig = cstack->frames ;  newSig < cstack->frames + 10; newSig++){
+  for (newSig = cstack->frames; newSig < cstack->frames + 10; newSig++){
     if (cas(&newSig->used, 0, 1))
       break;
   }
-  if (newSig == cstack->frames + 10){//no free cell
+  if (newSig == cstack->frames + 10) { // stack is full
     ans = 0;
-    cprintf("\n\n             ERROR - NO free cell during proc.c::push !!!\n\n\n");
   }
-  else{
+  else {
     newSig->sender_pid = sender_pid;
     newSig->recepient_pid = recepient_pid;
     newSig->value = value;
     do {
       newSig->next = cstack->head;
-    } while (!cas((int*)&cstack->head, (int)newSig->next, (int)newSig  ));
-
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-        if(p->pid== recepient_pid){
-          if(p->sigPauseInvoked){
+    } while (!cas((int*)&cstack->head, (int)newSig->next, (int)newSig));
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if(p->pid == recepient_pid){
+          if(p->sigPauseInvoked) {
             p->state = RUNNABLE;
-            p->sigPauseInvoked=0;
+            p->sigPauseInvoked = 0;
           }
-          break;//recipient_pid is valid
+          break;
         }
     }
   }
-                                                                                              //cprintf("     push release\n");
   release(&ptable.lock);
   return ans;
 }
 
 struct cstackframe *pop(struct cstack *cstack) {
-                                                                                            //  cprintf("pop acuire\n");
   acquire(&ptable.lock);
   struct cstackframe *top;
   do {
     top = cstack->head;
-    if (top==0)
+    if (top == 0)
       break;
-  } while (!cas((int*)&cstack->head, (int)top, (int)top->next  ));
-                                                                                              //  cprintf("     pop release\n");
+  } while (!cas((int*)&cstack->head, (int)top, (int)top->next));
   release(&ptable.lock);
   return top;
 }
-
-
-
-
 
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
@@ -644,19 +634,16 @@ sigsend_dest_pid_found:
 
 void sigret(void) {
   memmove(proc->tf, &proc->oldTf, sizeof(struct trapframe));
-  proc->ignoreSignals = 0;
+  proc->ignoreSignals = 0; // enable handling next pending signal
 }
 
 void sigpause(void) {
-                                                                                            //  cprintf("sigPause acuire\n");
   acquire(&ptable.lock);
-  if (proc->cstack.head==0){//only if the stack is EMPTY we want to go to sleep!!
+  if (proc->cstack.head == 0){
     proc->state =SLEEPING;
     proc->sigPauseInvoked = 1;
-    sched();  //scheded is called with the table locked
+    sched();
   }
-
-                                                                                            //  cprintf("     sigpase realse\n");
   release(&ptable.lock);
 }
 
@@ -664,21 +651,20 @@ void checkSignals(void){
   if (proc == 0)
     return;
   if (proc->ignoreSignals)
-    return;
+    return; // durrently handling a signal
   struct cstackframe *poppedCstack = pop(&proc->cstack);
-  if (poppedCstack == (struct cstackframe *)0)//empty stack
-    return;
-  if(proc->sighandler == (sig_handler)-1)//default handler does nothing
-    return;
+  if (poppedCstack == (struct cstackframe *)0)
+    return; // no pending signals
+  if(proc->sighandler == (sig_handler)-1)
+    return; // default signal handler, ignore the signal
   proc->ignoreSignals = 1;
   memmove(&proc->oldTf, proc->tf, sizeof(struct trapframe));//backing up trap frame
   proc->tf->esp -= (uint)&invoke_sigret_end - (uint)&invoke_sigret_start;
   memmove((void*)proc->tf->esp, invoke_sigret_start, (uint)&invoke_sigret_end - (uint)&invoke_sigret_start);
-  *((int*)(proc->tf->esp-4)) = poppedCstack->value;
-  *((int*)(proc->tf->esp-8)) = poppedCstack->sender_pid;
-  *((int*)(proc->tf->esp-12)) = proc->tf->esp;// return adress is a compiled code that calls sigret
+  *((int*)(proc->tf->esp - 4)) = poppedCstack->value;
+  *((int*)(proc->tf->esp - 8)) = poppedCstack->sender_pid;
+  *((int*)(proc->tf->esp - 12)) = proc->tf->esp; // sigret system call code address
   proc->tf->esp -= 12;
-  proc->tf->eip = (uint)proc->sighandler;//setting the first instruction the be excuted after trapret
-
-  poppedCstack->used=0;//realsing the cell;
+  proc->tf->eip = (uint)proc->sighandler; // trapret will resume into signal handler
+  poppedCstack->used = 0; // free the cstackframe
 }
