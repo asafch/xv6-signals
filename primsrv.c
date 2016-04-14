@@ -1,8 +1,11 @@
 #include "user.h"
 
+#define BUF_SIZE 128
+
 int numOfIdleChildren;
 int n;
 int table[3][62]; //this table holds the idle childs   (pid, idle=0/busy=1, value from shell)
+char buf[BUF_SIZE];
 
 int findPrim(int value){
 	// int sol = value;
@@ -56,7 +59,6 @@ int main(int argc, char *argv[]) {
 	numOfIdleChildren = n;
 	int i;
 	int numRead;
-	char buf[128];
 	printf(1, "workers pids:\n");
 	for (i = 0; i < n; i++){
 			table[0][i] = fork();
@@ -73,19 +75,21 @@ int main(int argc, char *argv[]) {
 	}
 	printf(1, "				***       \n");
 	sigset((sig_handler)&fatherHandler);
+
 	while (1) {
 		printf(1, "please enter a number: ");
 		gets(buf, 128);
 		if(strlen(buf) == 1 && buf[0]=='\n')
 			continue;
 		numRead = atoi(buf);
+		memset(buf, '\0', BUF_SIZE);
 		if (numRead == 0)
 			break; // commence graceful shutdown
 		if (numOfIdleChildren == 0){
 			printf(1, "no idle workers\n");
 			continue;
 		}
-		for (i = 0; i < n; i++){
+		for (i = 0; i < n; i++)
 			if (table[1][i] == 0){ // idle child
 				table[1][i] = 1;	// mark child as busy
 				table[2][i] = numRead;
@@ -93,16 +97,17 @@ int main(int argc, char *argv[]) {
 				sigsend(table[0][i], numRead);
 				break;
 			}
-		}
 	}
-	for (i = 0; i < n; i++){
+
+	for (i = 0; i < n; i++)
 		sigsend(table[0][i], 0); // signal children to self-terminate
-	}
+
 	for (i = 0; i < n; i++){
 		if(table[1][i] == 1)
 			sigpause(); // wait for a result
 		wait();
 	}
+
 	printf(1, "primesrv exit\n");
 	exit();
 }

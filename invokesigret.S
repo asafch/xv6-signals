@@ -6,5 +6,4 @@
 invoke_sigret_start:
   movl $SYS_sigret, %eax
   int $T_SYSCALL
-  ret
 invoke_sigret_end:
