@@ -26,7 +26,9 @@ alltraps:
   # Return falls through to trapret...
 .globl trapret
 trapret:
+  pushl %esp
   call checkSignals  // Check for pending signals, and handle if not already handling.
+  addl $4, %esp
   popal
   popl %gs
   popl %fs

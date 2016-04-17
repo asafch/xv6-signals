@@ -647,11 +647,13 @@ void sigpause(void) {
   release(&ptable.lock);
 }
 
-void checkSignals(void){
+void checkSignals(struct trapframe *tf){
   if (proc == 0)
-    return;
+    return; // no proc is defined for this CPU
   if (proc->ignoreSignals)
-    return; // durrently handling a signal
+    return; // currently handling a signal
+  if ((tf->cs & 3) != DPL_USER)
+    return; // CPU isn't at privilege level 3, hence in user mode
   struct cstackframe *poppedCstack = pop(&proc->cstack);
   if (poppedCstack == (struct cstackframe *)0)
     return; // no pending signals

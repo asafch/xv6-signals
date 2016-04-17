@@ -1,10 +1,11 @@
 #include "user.h"
 
 #define BUF_SIZE 128
+#define MAX_CHILDREN 61
 
 int numOfIdleChildren;
 int n;
-int table[3][62]; //this table holds the idle childs   (pid, idle=0/busy=1, value from shell)
+int table[3][MAX_CHILDREN]; // for each column: row 0 is the child's pid, row 1 indicates busy\idle, row 2 is the number sent to the child via sigsend
 char buf[BUF_SIZE];
 
 int findPrim(int value){
@@ -12,11 +13,12 @@ int findPrim(int value){
 	int i;
 	while (1) {
 		value++;
-		for (i = 2; i < value; i++){
+		int limit = value / 2;
+		for (i = 2; i < limit; i++) {
 			if (value % i == 0)
 				break;
 		}
-		if (i == value) // sol is a prime number
+		if (i == limit) // value is a prime number
 			return value;
 	}
 }
@@ -52,8 +54,8 @@ int main(int argc, char *argv[]) {
 	// desired handler.
 	sigset((sig_handler)&workerPrimHandler);
 	n = atoi(argv[1]);
-	if (n > 62)	{
-				printf(1, "62 is the maximum number of children\n");
+	if (n > MAX_CHILDREN)	{
+				printf(1, "61 is the maximum number of children\n");
 				exit();
 	}
 	numOfIdleChildren = n;
@@ -64,7 +66,7 @@ int main(int argc, char *argv[]) {
 			table[0][i] = fork();
 			if (table[0][i] == 0) { // child code
 				while(1)
-					sigpause();	//the handler itself suposed to exit
+					sigpause();
 				printf(1, "ERROR\n");
 				exit();
 			}
@@ -73,13 +75,13 @@ int main(int argc, char *argv[]) {
 				printf(1, "pid: %d\n", table[0][i]);
 			}
 	}
-	printf(1, "				***       \n");
+	printf(1, "\n\n");
 	sigset((sig_handler)&fatherHandler);
 
 	while (1) {
 		printf(1, "please enter a number: ");
-		gets(buf, 128);
-		if(strlen(buf) == 1 && buf[0]=='\n')
+		gets(buf, BUF_SIZE);
+		if(strlen(buf) == 1 && buf[0] == '\n')
 			continue;
 		numRead = atoi(buf);
 		memset(buf, '\0', BUF_SIZE);
