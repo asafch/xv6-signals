@@ -49,7 +49,7 @@ struct context {
   uint eip;
 };
 
-enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, NEG_UNUSED, EMBRYO, SLEEPING, NEG_SLEEPING, RUNNABLE, NEG_RUNNABLE, RUNNING, ZOMBIE, NEG_ZOMBIE };
 
 // entry in concurrent stack
 struct cstackframe {
