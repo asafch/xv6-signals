@@ -7,7 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
-
+#define DEBUG 0
 
 struct {
   struct spinlock lock;
@@ -196,7 +196,7 @@ fork(void)
   // acquire(&ptable.lock);
   if (!cas(&np->state, EMBRYO, RUNNABLE))
     panic("fork: cas failed");
-  cprintf("cpu: %d, fork, np: %d, state: EMBRYO to RUNNABLE\n", (int) cpu->id, np->pid);
+  if (DEBUG) cprintf("                      cpu: %d, fork, np: %d, state: EMBRYO to RUNNABLE\n", (int) cpu->id, np->pid);
   // release(&ptable.lock);
 
   return pid;
@@ -231,7 +231,7 @@ exit(void)
   pushcli();
   if(!cas(&proc->state, RUNNING, NEG_ZOMBIE))
     panic("exit: cas failed");
-  cprintf("cpu: %d, exit, proc: %d, state: RUNNING to NEG_ZOMBIE\n", (int) cpu->id, proc->pid);
+  if (DEBUG) cprintf("                      cpu: %d, exit, proc: %d, state: RUNNING to NEG_ZOMBIE\n", (int) cpu->id, proc->pid);
 
 
   // Parent might be sleeping in wait().
@@ -274,7 +274,7 @@ wait(void)
         continue;
       havekids = 1;
       if(cas(&p->state, ZOMBIE, NEG_UNUSED)){
-        cprintf("cpu: %d, wait, p: %d, state: ZOMBIE to NEG_UNUSED\n", (int) cpu->id, p->pid);
+        if (DEBUG) cprintf("                      cpu: %d, wait, p: %d, state: ZOMBIE to NEG_UNUSED\n", (int) cpu->id, p->pid);
 
         // Found one.
         pid = p->pid;
@@ -286,7 +286,7 @@ wait(void)
         // cas(&proc->state, NEG_SLEEPING, RUNNING);
         // release(&ptable.lock);
         cas(&p->state, NEG_UNUSED, UNUSED);
-        cprintf("cpu: %d, wait p: %d, state: NEG_UNUSED to UNUSED\n", (int) cpu->id, p->pid);
+        if (DEBUG) cprintf("                      cpu: %d, wait p: %d, state: NEG_UNUSED to UNUSED\n", (int) cpu->id, p->pid);
         popcli();
         return pid;
       }
@@ -302,7 +302,7 @@ wait(void)
       return -1;
     }
     proc->state = NEG_SLEEPING;
-    cprintf("cpu: %d, wait, proc: %d, state: RUNNING to NEG_SLEEPING\n", (int) cpu->id, proc->pid);
+    if (DEBUG) cprintf("                      cpu: %d, wait, proc: %d, state: RUNNING to NEG_SLEEPING\n", (int) cpu->id, proc->pid);
     // Wait for children to exit.  (See wakeup1 call in proc_exit.)
     sched();
   }
@@ -344,7 +344,7 @@ scheduler(void)
       if(!cas(&p->state, RUNNABLE, RUNNING)) {
         continue;
       }
-      cprintf("cpu: %d, scheduler, p: %d, state: RUNNABLE to RUNNING\n", (int) cpu->id, p->pid);
+      if (DEBUG) cprintf("                      cpu: %d, scheduler, p: %d, state: RUNNABLE to RUNNING\n", (int) cpu->id, p->pid);
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -352,23 +352,19 @@ scheduler(void)
       switchuvm(p);
       // p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
-      if (proc->state == NEG_SLEEPING) {
-        if (proc->killed) {
-          proc->state = RUNNABLE;
-          cprintf("cpu: %d, scheduler, proc: %d, state: NEG_SLEEPING to RUNNABLE, killed\n", (int) cpu->id, proc->pid);
-        }
-        else {
-          proc->state = SLEEPING;
-          cprintf("cpu: %d, scheduler, proc: %d, state: NEG_SLEEPING to SLEEPING\n", (int) cpu->id, proc->pid);
-        }
+      if (cas(&proc->state, NEG_SLEEPING, NEG_SLEEPING)) {
+          if (proc->killed)
+            // cas(&proc->state, SLEEPING, RUNNABLE);
+            proc->state = RUNNABLE;
+          else
+            proc->state = SLEEPING;
+          if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_SLEEPING to SLEEPING\n", (int) cpu->id, proc->pid);
       }
-      if (proc->state == NEG_ZOMBIE) {
-        proc->state = ZOMBIE;
-        cprintf("cpu: %d, scheduler, proc: %d, state: NEG_ZOMBIE to ZOMBIE\n", (int) cpu->id, proc->pid);
+      if (cas(&proc->state, NEG_ZOMBIE, ZOMBIE)) {
+        if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_ZOMBIE to ZOMBIE\n", (int) cpu->id, proc->pid);
       }
-      if (proc->state == NEG_RUNNABLE) {
-        proc->state = RUNNABLE;
-        cprintf("cpu: %d, scheduler, proc: %d, state: NEG_RUNNABLE to RUNNABLE\n", (int) cpu->id, proc->pid);
+      if (cas(&proc->state, NEG_RUNNABLE, RUNNABLE)) {
+        if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_RUNNABLE to RUNNABLE\n", (int) cpu->id, proc->pid);
       }
       switchkvm();
 
@@ -380,7 +376,6 @@ scheduler(void)
     }
     // release(&ptable.lock);
     popcli();
-
   }
 }
 
@@ -412,7 +407,7 @@ yield(void)
   pushcli();
   if (!cas(&proc->state, RUNNING, NEG_RUNNABLE))
     panic("yield: cas failed");
-  cprintf("cpu: %d, yield, proc: %d, state: RUNNING to NEG_RUNNABLE\n", (int) cpu->id, proc->pid);
+  if (DEBUG) cprintf("                      cpu: %d, yield, proc: %d, state: RUNNING to NEG_RUNNABLE\n", (int) cpu->id, proc->pid);
   sched();
   // release(&ptable.lock);
   popcli();
@@ -450,6 +445,13 @@ sleep(void *chan, struct spinlock *lk)
   if(lk == 0)
     panic("sleep without lk");
 
+  proc->chan = (int)chan;
+
+  // Go to sleep.
+  if (!cas(&proc->state, RUNNING, NEG_SLEEPING))
+    panic("sleep: cas failed");
+  if (DEBUG) cprintf("                      cpu: %d, sleep, proc: %d, state: RUNNING to NEG_SLEEPING\n", (int) cpu->id, proc->pid);
+
   // Must acquire ptable.lock in order to
   // change p->state and then call sched.
   // Once we hold ptable.lock, we can be
@@ -464,11 +466,6 @@ sleep(void *chan, struct spinlock *lk)
   else
     panic("sleep: lk IS ptable.lock");
 
-  // Go to sleep.
-  if (!cas(&proc->state, RUNNING, NEG_SLEEPING))
-    panic("sleep: cas failed");
-  cprintf("cpu: %d, sleep, proc: %d, state: RUNNING to NEG_SLEEPING\n", (int) cpu->id, proc->pid);
-  proc->chan = (int)chan;
   sched();
 
   // Reacquire original lock.
@@ -489,24 +486,39 @@ wakeup1(void *chan)
 {
   struct proc *p;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    // if(cas(&p->state, NEG_SLEEPING, NEG_RUNNABLE)){
+    //   cprintf("-~-~-~-~-~-~-~-~-~-~!!!!!-~--~-~_~_~_~_~_~_~_~_cpu: %d,NEG_SLEEPING to NEG_RUNABLE!!!!!!\n", (int) cpu->id);//DELETE
+    //   if (p->chan == (int)chan)
+    //     p->chan = 0;
+    //   else
+    //     if(!cas(&p->state, NEG_RUNNABLE, NEG_SLEEPING))
+    //       panic("wakeup1: cas #2 failed");
+    //
+    //
+    // }
+
+    while (p->state == NEG_SLEEPING) {
+      // busy-wait
+      cprintf("cpu: %d, busy-wait\n", (int) cpu->id);//DELETE
+    }
+
     if(cas(&p->state, SLEEPING, NEG_RUNNABLE)){
-      // cprintf("cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE\n", p->pid);
+      // if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE\n", p->pid);
       if (p->chan == (int)chan) {
         // Tidy up.
         p->chan = 0;
         if(!cas(&p->state, NEG_RUNNABLE, RUNNABLE))
           panic("wakeup1: cas #1 failed");
-        cprintf("cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE to RUNNABLE\n", (int) cpu->id, p->pid);
+        if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE to RUNNABLE\n", (int) cpu->id, p->pid);
       }
       else
         if(!cas(&p->state, NEG_RUNNABLE, SLEEPING))
           panic("wakeup1: cas #2 failed");
-        // cprintf("cpu: %d, wakeup1, p: %d, state: NEG_RUNNABLE to SLEEPING\n", p->pid);
+        // if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: NEG_RUNNABLE to SLEEPING\n", p->pid);
     }
-    if(cas(&p->state, NEG_SLEEPING, NEG_SLEEPING)){
-                                                                                    cprintf("cpu: %d,                                    Caught neg_SLEEPING!!!!!!\n", (int) cpu->id);//DELETE
-    }
+
+  }
 }
 
 // Wake up all processes sleeping on chan.
@@ -514,7 +526,7 @@ void
 wakeup(void *chan)
 {
   // acquire(&ptable.lock);
-  cprintf("cpu: %d, wakeup\n", (int) cpu->id);
+  if (DEBUG) cprintf("                      cpu: %d, wakeup\n", (int) cpu->id);
   pushcli();
   wakeup1(chan);
   // release(&ptable.lock);
@@ -538,7 +550,7 @@ kill(int pid)
       // if(p->state == SLEEPING)
       //   p->state = RUNNABLE;
       cas(&p->state, SLEEPING, RUNNABLE);
-      cprintf("cpu: %d, kill, p: %d, state: SLEEPING to RUNNABLE\n", (int) cpu->id, p->pid);
+      if (DEBUG) cprintf("                      cpu: %d, kill, p: %d, state: SLEEPING to RUNNABLE\n", (int) cpu->id, p->pid);
       // release(&ptable.lock);
       // popcli();
       return 0;
@@ -632,16 +644,16 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("cpu: %d, %d %s %s", p->pid, state, p->name);
+    if (DEBUG) cprintf("                      cpu: %d, %d %s %s", p->pid, state, p->name);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
-        cprintf("cpu: %d,  %p", pc[i]);
+        if (DEBUG) cprintf("                      cpu: %d,  %p", pc[i]);
     }
-    cprintf("cpu: %d, \n\n\n");
+    if (DEBUG) cprintf("                      cpu: %d, \n\n\n");
   }
 
-  cprintf("cpu: %d, HEY1\n");
+  if (DEBUG) cprintf("                      cpu: %d, HEY1\n");
   struct cstack testMX;
   struct cstack* testM = &testMX;
 
@@ -652,7 +664,7 @@ procdump(void)
   testM->head = 0;
 
 
-  cprintf("cpu: %d, 1st push return: %d!\n", push(testM, 9,9,9));
+  if (DEBUG) cprintf("                      cpu: %d, 1st push return: %d!\n", push(testM, 9,9,9));
   push(testM, 4,5,6);
   push (testM, 1,2,3);
   push(testM, 4,5,6);
@@ -661,12 +673,12 @@ procdump(void)
   push (testM, 1,2,3);
   push(testM, 4,5,6);
   push (testM, 1,2,3);
-  cprintf("cpu: %d, 10th push return: %d!\n", push(testM, 4,5,6));
+  if (DEBUG) cprintf("                      cpu: %d, 10th push return: %d!\n", push(testM, 4,5,6));
 
-  cprintf("cpu: %d, 11th push return: %d!\n", push(testM, 4,5,6));
+  if (DEBUG) cprintf("                      cpu: %d, 11th push return: %d!\n", push(testM, 4,5,6));
 
   pop(testM)->used=0;
-  cprintf("cpu: %d, extra pop return 1\n 12th push return: %d!\n", push(testM, 4,5,6));
+  if (DEBUG) cprintf("                      cpu: %d, extra pop return 1\n 12th push return: %d!\n", push(testM, 4,5,6));
 
   pop(testM)->used=0;
     pop(testM)->used=0;
@@ -676,17 +688,17 @@ procdump(void)
             pop(testM)->used=0;
               pop(testM)->used=0;
                 pop(testM)->used=0;
-      cprintf("cpu: %d, 9th pop returns: %d!\n", pop(testM)->value);
-                    cprintf("cpu: %d, 10th pop returns: %d!\n", pop(testM)->value); //should release the used of the 2 last pops as well!!   !!
+      if (DEBUG) cprintf("                      cpu: %d, 9th pop returns: %d!\n", pop(testM)->value);
+                    if (DEBUG) cprintf("                      cpu: %d, 10th pop returns: %d!\n", pop(testM)->value); //should release the used of the 2 last pops as well!!   !!
 
-                    cprintf("cpu: %d, 11th pop returns: %d!\n", (int)pop(testM));
+                    if (DEBUG) cprintf("                      cpu: %d, 11th pop returns: %d!\n", (int)pop(testM));
 
-                  cprintf("cpu: %d, 13th push return: %d!\n", push(testM, 7,7,7));
-                  cprintf("cpu: %d, 12th pop returns: %d!\n", (int)pop(testM)->value);
+                  if (DEBUG) cprintf("                      cpu: %d, 13th push return: %d!\n", push(testM, 7,7,7));
+                  if (DEBUG) cprintf("                      cpu: %d, 12th pop returns: %d!\n", (int)pop(testM)->value);
                 //this test should return 1 1 0 1 1  6 9 0 1 7
 
 
-  cprintf("cpu: %d, HEY2\n");
+  if (DEBUG) cprintf("                      cpu: %d, HEY2\n");
 }
 
 
@@ -720,7 +732,7 @@ void sigpause(void) {
   pushcli();
   if(!cas(&proc->state, RUNNING, NEG_SLEEPING))
     panic("sigpause: cas #1 failed");
-  cprintf("cpu: %d, sigpause, proc: %d, state: RUNNING to NEG_SLEEPING\n", (int) cpu->id, proc->pid);
+  if (DEBUG) cprintf("                      cpu: %d, sigpause, proc: %d, state: RUNNING to NEG_SLEEPING\n", (int) cpu->id, proc->pid);
   if (proc->cstack.head == 0){
     proc->chan = 0;
     proc->sigPauseInvoked = 1;
