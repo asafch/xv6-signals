@@ -196,7 +196,7 @@ writetest1(void)
     printf(stdout, "error: creat big failed!\n");
     exit();
   }
-
+  printf(stdout, "big files, first test passed\n"); // TODO delete
   for(i = 0; i < MAXFILE; i++){
     ((int*)buf)[0] = i;
     if(write(fd, buf, 512) != 512){
@@ -206,7 +206,7 @@ writetest1(void)
   }
 
   close(fd);
-
+  printf(stdout, "big files, second test passed\n"); // TODO delete
   fd = open("big", O_RDONLY);
   if(fd < 0){
     printf(stdout, "error: open big failed!\n");
@@ -234,6 +234,7 @@ writetest1(void)
     n++;
   }
   close(fd);
+  printf(stdout, "big files, third test passed\n"); // TODO delete
   if(unlink("big") < 0){
     printf(stdout, "unlink big failed\n");
     exit();

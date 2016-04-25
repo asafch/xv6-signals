@@ -247,7 +247,7 @@ exit(void)
 
   cprintf("exit: cpu: %d, pid: %d, parent chan: %p, parent state: %d\n", (int)cpu->id, proc->pid, proc->parent->chan, proc->parent->state);
   // Parent might be sleeping in wait().
-  wakeup1(proc->parent);
+  // wakeup1(proc->parent);  // TODO moved into scheduler so it will happen only after the proc has been transitioned to ZOMBIE
 
   // Jump into the scheduler, never to return.
 
@@ -315,13 +315,19 @@ freeproc(struct proc *p)
   while (p && p->state == NEG_ZOMBIE) {
     // busy-wait
   }
+  // do {
+  //   // busy-wait
+  // } while (p && !cas(&p->state, ZOMBIE, NEG_ZOMBIE));
   if (!p || p->state != ZOMBIE)
     panic("freeproc not zombie");
+  // if (!p)
+  //   panic("freeproc not zombie");
   kfree(p->kstack);
   p->kstack = 0;
   freevm(p->pgdir);
   p->killed = 0;
   p->chan = 0;
+  // p->state = ZOMBIE;
 }
 
 //PAGEBREAK: 42
@@ -356,31 +362,26 @@ scheduler(void)
       switchuvm(p);
       // p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
-      // if (cas(&proc->state, NEG_SLEEPING, NEG_SLEEPING)) {
-      //     if (proc->killed)
-      //       // cas(&proc->state, SLEEPING, RUNNABLE);
-      //       proc->state = RUNNABLE;
-      //     else
-      //       proc->state = SLEEPING;
-      //     if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_SLEEPING to SLEEPING\n", (int) cpu->id, proc->pid);
-      // }
-      if (cas(&proc->state, NEG_SLEEPING, SLEEPING)) {
-        if (cas(&proc->killed, 1, 0))
-          proc->state = RUNNABLE;
+      switchkvm();
+      if (cas(&p->state, NEG_SLEEPING, SLEEPING)) {
+        if (cas(&p->killed, 1, 0))
+          p->state = RUNNABLE;
       }
-      if (cas(&proc->state, NEG_ZOMBIE, ZOMBIE)) {
+      if (cas(&p->state, NEG_ZOMBIE, ZOMBIE)) {
+        freeproc(p);
+        wakeup1(p->parent);
         if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_ZOMBIE to ZOMBIE\n", (int) cpu->id, proc->pid);
       }
       if (cas(&proc->state, NEG_RUNNABLE, RUNNABLE)) {
         if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_RUNNABLE to RUNNABLE\n", (int) cpu->id, proc->pid);
       }
-      switchkvm();
+
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
-      if (p->state == ZOMBIE)
-        freeproc(p);
+      // if (p->state == ZOMBIE)
+      //   freeproc(p);
     }
     // release(&ptable.lock);
     popcli();
@@ -489,24 +490,11 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
-
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    // if(cas(&p->state, NEG_SLEEPING, NEG_RUNNABLE)){
-    //   cprintf("-~-~-~-~-~-~-~-~-~-~!!!!!-~--~-~_~_~_~_~_~_~_~_cpu: %d,NEG_SLEEPING to NEG_RUNABLE!!!!!!\n", (int) cpu->id);//DELETE
-    //   if (p->chan == (int)chan)
-    //     p->chan = 0;
-    //   else
-    //     if(!cas(&p->state, NEG_RUNNABLE, NEG_SLEEPING))
-    //       panic("wakeup1: cas #2 failed");
-    //
-    //
-    // }
-
     while (p->state == NEG_SLEEPING) {
       // busy-wait
       if (cpu) cprintf("cpu: %d, busy-wait\n", (int) cpu->id);   // TODO delete
     }
-
     if(cas(&p->state, SLEEPING, NEG_RUNNABLE)){
       // if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE\n", p->pid);
       if (p->chan == (int)chan) {
@@ -517,9 +505,12 @@ wakeup1(void *chan)
           panic("wakeup1: cas #1 failed");
         if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE to RUNNABLE\n", (int) cpu->id, p->pid);
       }
-      else
+      else {
+        // cprintf("chan: %p, p->chan: %p, pid: %d\n", chan, p->chan, p->pid);
         if(!cas(&p->state, NEG_RUNNABLE, SLEEPING))
           panic("wakeup1: cas #2 failed");
+
+        }
         // if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: NEG_RUNNABLE to SLEEPING\n", p->pid);
     }
   }
