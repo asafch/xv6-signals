@@ -245,7 +245,7 @@ exit(void)
   // if(!cas(&proc->state, NEG_ZOMBIE, ZOMBIE))
   //   panic("exit: cas #2 failed");
 
-  cprintf("exit: waking up parent, pid: %d, parent: %d, chan: %d, proc->parent: %p\n", proc->pid, proc->parent->pid, proc->chan, proc->parent);
+  cprintf("exit: cpu: %d, pid: %d, parent chan: %p, parent state: %d\n", (int)cpu->id, proc->pid, proc->parent->chan, proc->parent->state);
   // Parent might be sleeping in wait().
   wakeup1(proc->parent);
 
@@ -277,6 +277,7 @@ wait(void)
         continue;
       havekids = 1;
       if(cas(&p->state, ZOMBIE, NEG_UNUSED)){
+        if (proc) cprintf("proc %d collected ZOMBIE %d\n", proc->pid, p->pid);
         if (DEBUG) cprintf("                      cpu: %d, wait, p: %d, state: ZOMBIE to NEG_UNUSED\n", (int) cpu->id, p->pid);
         // Found one.
         pid = p->pid;
@@ -355,13 +356,17 @@ scheduler(void)
       switchuvm(p);
       // p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
-      if (cas(&proc->state, NEG_SLEEPING, NEG_SLEEPING)) {
-          if (proc->killed)
-            // cas(&proc->state, SLEEPING, RUNNABLE);
-            proc->state = RUNNABLE;
-          else
-            proc->state = SLEEPING;
-          if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_SLEEPING to SLEEPING\n", (int) cpu->id, proc->pid);
+      // if (cas(&proc->state, NEG_SLEEPING, NEG_SLEEPING)) {
+      //     if (proc->killed)
+      //       // cas(&proc->state, SLEEPING, RUNNABLE);
+      //       proc->state = RUNNABLE;
+      //     else
+      //       proc->state = SLEEPING;
+      //     if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_SLEEPING to SLEEPING\n", (int) cpu->id, proc->pid);
+      // }
+      if (cas(&proc->state, NEG_SLEEPING, SLEEPING)) {
+        if (cas(&proc->killed, 1, 0))
+          proc->state = RUNNABLE;
       }
       if (cas(&proc->state, NEG_ZOMBIE, ZOMBIE)) {
         if (DEBUG) cprintf("                      cpu: %d, scheduler, proc: %d, state: NEG_ZOMBIE to ZOMBIE\n", (int) cpu->id, proc->pid);
@@ -391,7 +396,7 @@ sched(void)
   // if(!holding(&ptable.lock))
   //   panic("sched ptable.lock");
   if(cpu->ncli != 1) {
-    cprintf("panic follows, ncli: %d\n", cpu->ncli);
+    cprintf("panic follows, ncli: %d\n", cpu->ncli); // TODO delete
     panic("sched locks");
   }
   if(proc->state == RUNNING)
@@ -499,13 +504,14 @@ wakeup1(void *chan)
 
     while (p->state == NEG_SLEEPING) {
       // busy-wait
-      cprintf("cpu: %d, busy-wait\n", (int) cpu->id);//DELETE
+      if (cpu) cprintf("cpu: %d, busy-wait\n", (int) cpu->id);   // TODO delete
     }
 
     if(cas(&p->state, SLEEPING, NEG_RUNNABLE)){
       // if (DEBUG) cprintf("                      cpu: %d, wakeup1, p: %d, state: SLEEPING to NEG_RUNNABLE\n", p->pid);
       if (p->chan == (int)chan) {
         // Tidy up.
+        // if (proc) cprintf("proc %d woke-up p %d on chan %p\n", proc->pid, p->pid, p->chan);
         p->chan = 0;
         if(!cas(&p->state, NEG_RUNNABLE, RUNNABLE))
           panic("wakeup1: cas #1 failed");
