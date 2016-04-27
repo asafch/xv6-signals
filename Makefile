@@ -174,7 +174,6 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_primsrv\
-	_synctests\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

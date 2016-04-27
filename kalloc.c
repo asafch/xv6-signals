@@ -60,22 +60,12 @@ void
 kfree(char *v)
 {
   struct run *r;
-  // if((uint)v % PGSIZE || v < end || v2p(v) >= PHYSTOP){
-  //   cprintf("v:%d, panic follows\n", (int) v);
-  //   panic("kfree");
-  // }
-  if ((uint)v % PGSIZE) {
-    cprintf("v:%d, (uint)v %% PGSIZE\n", (int) v);
+
+  if((uint)v % PGSIZE || v < end || v2p(v) >= PHYSTOP){
+    cprintf("v:%d, panic follows\n", (int) v);
     panic("kfree");
   }
-  if (v < end) {
-    cprintf("v:%d, v < end\n", (int) v);
-    panic("kfree");
-  }
-  if (v2p(v) >= PHYSTOP) {
-    cprintf("v:%d, v2p(v) >= PHYSTOP\n", (int) v);
-    panic("kfree");
-  }
+
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
 
@@ -87,6 +77,7 @@ kfree(char *v)
   if(kmem.use_lock)
     release(&kmem.lock);
 }
+
 
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.

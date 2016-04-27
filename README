@@ -1,4 +1,6 @@
-This is an extension of xv6, which adds inter-process signals and performance optimization vis CAS (compare and swap).
+This is an extension of xv6, which adds inter-process signals and performance
+ optimization vis CAS (compare and swap).
+
 This was done as an assignemnt in BGU's CS department\operating systems course.
 
 See [assignment description](https://www.cs.bgu.ac.il/~os162/Assignments/Assignment_2).
