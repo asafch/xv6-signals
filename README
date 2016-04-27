@@ -1,3 +1,12 @@
+This is an extension of xv6, which adds inter-process signals and performance optimization vis CAS (compare and swap).
+This was done as an assignemnt in BGU's CS department\operating systems course.
+
+See [assignment description](https://www.cs.bgu.ac.il/~os162/Assignments/Assignment_2).
+
+Original xv6 README follows.
+
+-------------------------------------------------------------
+
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern x86-based multiprocessor using ANSI C.
@@ -33,7 +42,7 @@ Copyright 2006-2014 Frans Kaashoek, Robert Morris, and Russ Cox.
 ERROR REPORTS
 
 If you spot errors or have suggestions for improvement, please send
-email to Frans Kaashoek and Robert Morris (kaashoek,rtm@csail.mit.edu). 
+email to Frans Kaashoek and Robert Morris (kaashoek,rtm@csail.mit.edu).
 
 BUILDING AND RUNNING XV6
 
