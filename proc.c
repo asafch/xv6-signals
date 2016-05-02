@@ -355,11 +355,12 @@ scheduler(void)
       // p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
+      proc = 0;
       if (cas(&p->state, NEG_SLEEPING, SLEEPING)) {
         if (cas(&p->killed, 1, 0))
           p->state = RUNNABLE;
       }
-      if (cas(&proc->state, NEG_RUNNABLE, RUNNABLE)) {
+      if (cas(&p->state, NEG_RUNNABLE, RUNNABLE)) {
       }
       if (p->state == NEG_ZOMBIE) {
         freeproc(p);
@@ -369,7 +370,7 @@ scheduler(void)
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      proc = 0;
+
       // if (p->state == ZOMBIE)
       //   freeproc(p);
     }
@@ -477,22 +478,32 @@ wakeup1(void *chan)
 {
   struct proc *p;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    while (p->state == NEG_SLEEPING) {
-      // busy-wait
-      // if (cpu) cprintf("cpu: %d, busy-wait\n", (int) cpu->id);   // TODO delete
-    }
-    if(cas(&p->state, SLEEPING, NEG_RUNNABLE)){
-      if (p->chan == (int)chan) {
-        // Tidy up.
-        p->chan = 0;
-        if(!cas(&p->state, NEG_RUNNABLE, RUNNABLE))
-          panic("wakeup1: cas #1 failed");
+    if (p->chan == (int) chan && (p->state == SLEEPING || p->state == NEG_SLEEPING)) {
+      while (p->state == NEG_SLEEPING) {
+        // busy-wait
       }
-      else {
-        if(!cas(&p->state, NEG_RUNNABLE, SLEEPING))
-          panic("wakeup1: cas #2 failed");
-        }
+      if (cas(&p->state, SLEEPING, NEG_RUNNABLE)) {
+        p->chan = 0;
+        if (!cas(&p->state, NEG_RUNNABLE, RUNNABLE))
+          panic("wakeup1: cas failed");
+      }
     }
+    // while (p->state == NEG_SLEEPING) {
+    //   // busy-wait
+    //   // if (cpu) cprintf("cpu: %d, busy-wait\n", (int) cpu->id);   // TODO delete
+    // }
+    // if(cas(&p->state, SLEEPING, NEG_RUNNABLE)){
+    //   if (p->chan == (int)chan) {
+    //     // Tidy up.
+    //     p->chan = 0;
+    //     if(!cas(&p->state, NEG_RUNNABLE, RUNNABLE))
+    //       panic("wakeup1: cas #1 failed");
+    //   }
+    //   else {
+    //     if(!cas(&p->state, NEG_RUNNABLE, SLEEPING))
+    //       panic("wakeup1: cas #2 failed");
+    //     }
+    // }
   }
 }
 
