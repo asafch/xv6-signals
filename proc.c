@@ -311,13 +311,7 @@ wait(void)
 void
 freeproc(struct proc *p)
 {
-  while (p && p->state == NEG_ZOMBIE) {
-    // busy-wait
-  }
-  // do {
-  //   // busy-wait
-  // } while (p && !cas(&p->state, ZOMBIE, NEG_ZOMBIE));
-  if (!p || p->state != ZOMBIE)
+  if (!p || p->state != NEG_ZOMBIE)
     panic("freeproc not zombie");
   // if (!p)
   //   panic("freeproc not zombie");
@@ -365,13 +359,13 @@ scheduler(void)
         if (cas(&p->killed, 1, 0))
           p->state = RUNNABLE;
       }
-      if (cas(&p->state, NEG_ZOMBIE, ZOMBIE)) {
-        freeproc(p);
-        wakeup1(p->parent);
-      }
       if (cas(&proc->state, NEG_RUNNABLE, RUNNABLE)) {
       }
-
+      if (p->state == NEG_ZOMBIE) {
+        freeproc(p);
+        if (cas(&p->state, NEG_ZOMBIE, ZOMBIE))
+          wakeup1(p->parent);
+      }
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
